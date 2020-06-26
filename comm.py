@@ -1,5 +1,10 @@
 class SquareTimingRecovery():
+    """This class implements OERDER, MEYR, "Digital Filter and Square Timing Recovery" IEEE Trans Comm., vol. 36 NO.5, MAY 1988.
+       Data fed into step() is expected to be oversampled by at least 4x and to be modulated by a linear modulation schemes (PAM, QAM, PSK).
+       It also assumes matched filtering has occured prior to this step.
+    """
     def __init__(self, sps, length):
+        assert sps >= 4, "sps should be >= 4"
         self.dt = 0
         self.sps = sps
         self.block_Size = length       
@@ -7,10 +12,17 @@ class SquareTimingRecovery():
         self.t0 = np.zeros((0,), dtype=np.double)
         self.t_x = np.zeros((0,), dtype=np.double)
         self.m = 0
-        assert(self.sps >= 4)
-            
+        
 
     def step(self, x):
+        """step() allows for block processing of a continuous data stream.
+           It tracks an internal buffer with additional samples at the head and tail to accomodate correct interpolation beyond the ends.
+           New samples get shifted into the middle of the buffer. A timing estimate is acquired and then applied using linear interpolation.
+           Parameters:
+               x - numpy.ndarray of IQ samples
+           Returns:
+               numpy.ndarray - interpolated x such that the first sample is a symbol sample 
+        """
         if self.buffer.size != x.size + 2*self.sps:
             self.buffer = np.zeros((x.size+2*self.sps,), dtype=x.dtype)
             # Create time vector
@@ -43,8 +55,21 @@ class SquareTimingRecovery():
         
         
 def upsample(x, n):
-    return np.hstack((np.expand_dims(x, axis=1), np.zeros((x.size,n-1)))).reshape((-1,))
+    """
+    upsample(x, n)
     
+    upsamples a signal x by inserting n-1 zeros.
+    works on (k,), (k,1) and (1,k) numpy.ndarray's
+    """
+    if len(x.shape)==1:
+        return np.hstack((np.expand_dims(x, axis=1), np.zeros((x.size,n-1)))).reshape((-1,))
+    elif len(x.shape)==2 and x.shape[1]==1:
+        return np.hstack((x, np.zeros((x.shape[0],n-1)))).reshape((-1,1))
+    elif len(x.shape)==2 and x.shape[0]==1:
+        return np.vstack((x, np.zeros((n-1,x.shape[1])))).transpose().reshape((1,-1))
+    else:
+        raise Exception("Array must have shape (k,), (k,1) or (1,k)")
+
 
 def rcosdesign(beta, span, sps, name='normal'):
     delay = span * sps / 2
